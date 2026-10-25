@@ -185,11 +185,28 @@ meson test -C build        # 十二组单元测试，337 项断言
 ./build/vm/dosvm.exe tests/progs/hello.exe              # 跑一个真实的 .EXE
 ./build/vm/dosvm.exe tests/progs/tel.com                # 走 INT 10h 写虚拟屏幕
 ./build/vm/dosvm.exe --root tests/progs tests/progs/cat.com   # 读宿主文件
-./build/vm/dosvm.exe
 ```
 
 以后的内核目标需要 clang 交叉编译（`--target=x86_64-unknown-none`），宿主编译器
 做不了这件事，等写 boot/ 的时候再补。
+
+### 网络与证书
+
+如果本机用 hosts 做了加速（Watt Toolkit / Steam++ 之类），`github.com` 会指向
+`127.0.0.1` 上的本地反代。git 默认的 openssl 后端不认它的自签证书，报错长这样：
+
+```
+fatal: unable to access '...': SSL certificate problem:
+       unable to get local issuer certificate
+```
+
+让 git 改用 Windows 证书库即可（只需要配一次，写在仓库里）：
+
+```sh
+git config http.sslBackend schannel
+```
+
+这条配置对正常的 HTTPS 也有效，加速关掉之后不用改回来。
 
 ## 可重现构建
 
