@@ -213,26 +213,8 @@ qemu-system-x86_64 -m 256M -cdrom dospp.iso -serial stdio -display none
 ```
 
 `OUT` 可以指到仓库外。Windows 的「受控文件夹访问」会拦住未经允许的程序写「文档」目录，
-Zig 恰好是这种新程序——踩过一次，症状是 `cannot open output file ... Permission denied`,
+Zig 恰好是这种新程序——踩过一次，症状是 `cannot open output file ... Permission denied`，
 而同一目录下 clang 写得好好的。
-
-### 网络与证书
-
-如果本机用 hosts 做了加速（Watt Toolkit / Steam++ 之类），`github.com` 会指向
-`127.0.0.1` 上的本地反代。git 默认的 openssl 后端不认它的自签证书，报错长这样：
-
-```
-fatal: unable to access '...': SSL certificate problem:
-       unable to get local issuer certificate
-```
-
-让 git 改用 Windows 证书库即可（只需要配一次，写在仓库里）：
-
-```sh
-git config http.sslBackend schannel
-```
-
-这条配置对正常的 HTTPS 也有效，加速关掉之后不用改回来。
 
 ## 可重现构建
 
