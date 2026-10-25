@@ -3,8 +3,24 @@
 一个**可启动、可分发的开源操作系统**：现代 x86_64 内核，加上一个**自研的用户态 DOS
 虚拟机**。虚拟机对 guest 呈现的 CPU 目标是 **i486SX 的完整整数指令集**。
 
-> **状态：Day 16 —— 内核线 M0 完成：Limine 引导进长模式，启动信息走串口。**
-> 每天做了什么见[进展](#进展)。
+> **当前状态**：虚拟机线 VM0–VM6 完成（能跑 `.COM` / `.EXE`，保护模式、分页、V86 齐备）；
+> 内核线 M0 完成（Limine 引导进长模式）。
+> **尚无发布版本**——首个可启动 ISO 要等 M7 与 VM7 都完成。
+
+## 快速开始
+
+不需要内核工具链，先看虚拟机跑起来：
+
+```sh
+meson setup build
+meson compile -C build
+./build/vm/dosvm.exe tests/progs/hello.exe
+```
+
+输出 `Hello from EXE!` 的是一个真实 16 位 DOS 程序——它在这个自研虚拟机里执行，
+不经过 QEMU、DOSBox 或任何第三方模拟器。
+
+其它示例见[构建](#构建)。
 
 ## 目标
 
@@ -75,27 +91,6 @@ DOS 兼容性**不进入内核**，而由用户空间的一个独立虚拟机提
 | **计划** | VGA 模式 13h、`INT 10h` 图形子集、块设备与文件访问 | 不设时间 |
 | **以后** | 见[以后的事](#以后的事) | 不承诺 |
 
-## 进展
-
-| Day | 做了什么 | 验收 |
-|---|---|---|
-| 1 | `include/dospp/types.h`：类型词汇表 + 编译期自检 | 语法检查通过 |
-| 2 | meson 构建 + `vm/main.cpp` | `meson compile` 通过，`dosvm.exe` 输出正常 |
-| 3 | `vm/cpu/regs.h`、`vm/cpu/mem.h` + 单元测试 | `meson test` 全绿 |
-| 4 | `vm/cpu/decode.h`、`exec.cpp`：取指、前缀、ModRM、MOV/INT/HLT | 25 项断言，涵盖段覆盖与 bp 走 SS |
-| 5 | `vm/dos/loader.cpp`、`int21.cpp`、`vm.cpp`、`main.cpp` | 跑通 `hello.com`，输出 `Hello, World!` |
-| 6 | `vm/dos/{hostfs,files}.cpp`：句柄表 + 宿主文件系统接口；`AH=3D/3E/3F/40` | 跑通 `cat.com`，读出真实宿主文件 |
-| 7 | `AH=4E/4F` 目录查找 + DTA、`AH=1A` 设 DTA、`AH=3B` 切目录、`AH=01/08` 读键 | 95 项断言全绿 |
-| 8 | `vm/dos/exe.cpp` MZ 装载 + 重定位；`psp.cpp` 构造 PSP；执行器补 `MOV Sreg` | 跑通 `hello.exe`，120 项断言全绿 |
-| 9 | `vm/dev/vga.cpp` 文本缓冲；`vm/dos/int10.cpp` 模式/光标/卷屏/电传 | 跑通 `tel.com`，232 项断言全绿 |
-| 10 | `0F` 扩展区：`LGDT`/`LIDT`/`SGDT`/`SIDT`、`MOV CRn`、`CLTS`、`EA` 远跳；段装载按 `PE` 分岔 | 252 项断言全绿 |
-| 11 | 异常投递（IDT 门、压栈帧、错误码）、`IRET`、`PUSH`/`POP` 组、`DIV`/`IDIV` | 271 项断言全绿 |
-| 12 | `CPL`/`DPL`/`RPL` 三方检查、`LLDT`/`LTR`、LDT 查表 | 290 项断言全绿 |
-| 13 | `cpu/mmu.h` 两级页表、4 MB 大页、`#PF` 错误码；全部取指与数据访问过页表 | 309 项断言全绿 |
-| 14 | V86 段语义、敏感指令受 IOPL 限制、`INT` 反射回虚拟机、`IRET` 保 VM 位 | 324 项断言全绿 |
-| 15 | `BSWAP`/`CMPXCHG`/`XADD`/`INVD`/`WBINVD`/`INVLPG`/`CR4` | 337 项断言全绿 |
-| 16 | `kernel/`：Limine 协议、长模式入口、串口控制台、链接脚本、可引导 ISO | QEMU 启动并打印 `DOS++ kernel M0` / 254 MiB 可用内存 |
-
 ## 以后的事
 
 以下功能技术上都能做，只是不在当前承诺范围内。按"解锁什么"排序：
@@ -152,6 +147,29 @@ DOS 兼容性**不进入内核**，而由用户空间的一个独立虚拟机提
 VM5 是虚拟机线的分水岭：只有 V86 与中断反射正确，保护模式程序才能在需要时调回
 实模式 BIOS，DOS 扩展器（DOS/4GW、CWSDPMI）才真正可用。
 
+## 开发日志
+
+按时间顺序记录实现过程。这里只是历史，**现在能做什么看[兼容性范围](#兼容性范围)和[路线图](#路线图)**。
+
+| Day | 做了什么 | 验收 |
+|---|---|---|
+| 1 | `include/dospp/types.h`：类型词汇表 + 编译期自检 | 语法检查通过 |
+| 2 | meson 构建 + `vm/main.cpp` | `meson compile` 通过，`dosvm.exe` 输出正常 |
+| 3 | `vm/cpu/regs.h`、`vm/cpu/mem.h` + 单元测试 | `meson test` 全绿 |
+| 4 | `vm/cpu/decode.h`、`exec.cpp`：取指、前缀、ModRM、MOV/INT/HLT | 25 项断言，涵盖段覆盖与 bp 走 SS |
+| 5 | `vm/dos/loader.cpp`、`int21.cpp`、`vm.cpp`、`main.cpp` | 跑通 `hello.com`，输出 `Hello, World!` |
+| 6 | `vm/dos/{hostfs,files}.cpp`：句柄表 + 宿主文件系统接口；`AH=3D/3E/3F/40` | 跑通 `cat.com`，读出真实宿主文件 |
+| 7 | `AH=4E/4F` 目录查找 + DTA、`AH=1A` 设 DTA、`AH=3B` 切目录、`AH=01/08` 读键 | 95 项断言全绿 |
+| 8 | `vm/dos/exe.cpp` MZ 装载 + 重定位；`psp.cpp` 构造 PSP；执行器补 `MOV Sreg` | 跑通 `hello.exe`，120 项断言全绿 |
+| 9 | `vm/dev/vga.cpp` 文本缓冲；`vm/dos/int10.cpp` 模式/光标/卷屏/电传 | 跑通 `tel.com`，232 项断言全绿 |
+| 10 | `0F` 扩展区：`LGDT`/`LIDT`/`SGDT`/`SIDT`、`MOV CRn`、`CLTS`、`EA` 远跳；段装载按 `PE` 分岔 | 252 项断言全绿 |
+| 11 | 异常投递（IDT 门、压栈帧、错误码）、`IRET`、`PUSH`/`POP` 组、`DIV`/`IDIV` | 271 项断言全绿 |
+| 12 | `CPL`/`DPL`/`RPL` 三方检查、`LLDT`/`LTR`、LDT 查表 | 290 项断言全绿 |
+| 13 | `cpu/mmu.h` 两级页表、4 MB 大页、`#PF` 错误码；全部取指与数据访问过页表 | 309 项断言全绿 |
+| 14 | V86 段语义、敏感指令受 IOPL 限制、`INT` 反射回虚拟机、`IRET` 保 VM 位 | 324 项断言全绿 |
+| 15 | `BSWAP`/`CMPXCHG`/`XADD`/`INVD`/`WBINVD`/`INVLPG`/`CR4` | 337 项断言全绿 |
+| 16 | `kernel/`：Limine 协议、长模式入口、串口控制台、链接脚本、可引导 ISO | QEMU 启动并打印 `DOS++ kernel M0` / 254 MiB 可用内存 |
+
 ## 发行计划
 
 | 产物 | 说明 |
@@ -175,8 +193,10 @@ M7 之前不发布任何版本。
 
 ## 构建
 
-依赖：`clang` 或 `gcc`、`nasm`、`meson`、`ninja`、`xorriso`、`qemu-system-x86_64`。
-内核用 **C17**，工具与用户空间用 **C++20**。
+虚拟机侧：`meson`、`ninja`、`gcc` 或 `clang`（C17 与 C++20）。
+
+内核侧：`clang`（`--target=x86_64-unknown-none`）、`zig`（只用它自带的 lld）、
+`xorriso`、`qemu-system-x86_64`，以及 Limine 官方二进制。
 
 ```sh
 meson setup build
@@ -197,9 +217,13 @@ cd kernel
 make OUT=build ZIG=/path/to/zig          # 编译并链接出 build/kernel.elf
 ```
 
-编译器是 clang（`--target=x86_64-unknown-none`），链接器借 **Zig 自带的 lld**。
-这不是选型偏好，是环境所迫：MSYS2 的 lld 只编了 COFF 后端，连 ELF 对象都认不出；
-mingw 的 GNU ld 又写死了 PE 逻辑，出不了 ELF。
+编译器是 clang（`--target=x86_64-unknown-none`），链接器用 **Zig 自带的 lld**
+（`make ZIG=...`）。绕这一道的原因：Windows 上工具链出的 lld 只有 COFF 后端，
+连 ELF 对象都会报 `unknown file type`，mingw 的 GNU ld 也只会输出 PE。
+Zig 打包的 lld 带完整 ELF 支持，解压即用。
+
+**Linux / macOS 上不需要 Zig**，直接用系统自带的 `ld.lld` 即可
+（`make LD=ld.lld` 或改一行 Makefile）。
 
 ISO 用 limine 官方二进制加 xorriso 打：
 
@@ -212,20 +236,19 @@ limine bios-install dospp.iso
 qemu-system-x86_64 -m 256M -cdrom dospp.iso -serial stdio -display none
 ```
 
-`OUT` 可以指到仓库外。Windows 的「受控文件夹访问」会拦住未经允许的程序写「文档」目录，
-Zig 恰好是这种新程序——踩过一次，症状是 `cannot open output file ... Permission denied`，
-而同一目录下 clang 写得好好的。
+`OUT` 可以指向任意目录，构建产物不进版本库。若输出目录被系统保护策略拦截，
+换一个位置即可。
 
-## 可重现构建
+## 可重现构建（计划中）
 
-"可分发"等于"别人能构建出同一个镜像"。构建环境**以容器为准，不以文档为准**：
-`docker/` 固定工具链版本，`.github/workflows/release.yml` 在打 tag 时于容器内产出
-ISO、源码包与校验和。
+"可分发"等于"别人能构建出同一个镜像"。目标是把工具链钉在容器里：`docker/` 固定版本，
+`.github/workflows/release.yml` 在打 tag 时产出 ISO、源码包与校验和。
+
+**这两个位置目前还没有文件**，首个版本发布前补上。
 
 ## 许可
 
-GPL-3.0-or-later。
+**GPL-3.0-or-later**，完整文本见 [LICENSE](LICENSE)。
 
-本项目**不包含任何第三方模拟器或 DOS 实现代码**，虚拟机为独立实现。文档中参考的
-DOS 行为描述来源于 fdpp（Copyright (C) 2018 Stas Sergeev）与 FreeDOS 内核（DOS-C），
-仅作规格参考。详见 `docs/CREDITS.md`。
+本项目**不包含任何第三方模拟器或 DOS 实现代码**，虚拟机为独立实现。实现过程中参考的
+DOS 行为规格（而非代码）来源列在 [docs/CREDITS.md](docs/CREDITS.md)。
