@@ -3,7 +3,7 @@
 一个**可启动、可分发的开源操作系统**：现代 x86_64 内核，加上一个**自研的用户态 DOS
 虚拟机**。虚拟机对 guest 呈现的 CPU 目标是 **i486SX 的完整整数指令集**。
 
-> **状态：Day 15 —— VM6 完成：i486SX 指令集补齐了。**
+> **状态：Day 16 —— 内核线 M0 完成：Limine 引导进长模式，启动信息走串口。**
 > 每天做了什么见[进展](#进展)。
 
 ## 目标
@@ -94,6 +94,7 @@ DOS 兼容性**不进入内核**，而由用户空间的一个独立虚拟机提
 | 13 | `cpu/mmu.h` 两级页表、4 MB 大页、`#PF` 错误码；全部取指与数据访问过页表 | 309 项断言全绿 |
 | 14 | V86 段语义、敏感指令受 IOPL 限制、`INT` 反射回虚拟机、`IRET` 保 VM 位 | 324 项断言全绿 |
 | 15 | `BSWAP`/`CMPXCHG`/`XADD`/`INVD`/`WBINVD`/`INVLPG`/`CR4` | 337 项断言全绿 |
+| 16 | `kernel/`：Limine 协议、长模式入口、串口控制台、链接脚本、可引导 ISO | QEMU 启动并打印 `DOS++ kernel M0` / 254 MiB 可用内存 |
 
 ## 以后的事
 
@@ -124,7 +125,7 @@ DOS 兼容性**不进入内核**，而由用户空间的一个独立虚拟机提
 
 | 里程碑 | 目标 | 状态 |
 |---|---|---|
-| M0 | 引导进入长模式，帧缓冲输出 | 未开始 |
+| M0 | 引导进入长模式，帧缓冲输出 | **完成**（Limine 进长模式，串口输出；帧缓冲已读到参数，画字要等字体） |
 | M1 | IDT + 带寄存器转储的异常处理 | 未开始 |
 | M2 | 物理/虚拟内存管理 + 内核堆 | 未开始 |
 | M3 | 帧缓冲控制台 + 键盘驱动 | 未开始 |
@@ -187,8 +188,33 @@ meson test -C build        # 十二组单元测试，337 项断言
 ./build/vm/dosvm.exe --root tests/progs tests/progs/cat.com   # 读宿主文件
 ```
 
-以后的内核目标需要 clang 交叉编译（`--target=x86_64-unknown-none`），宿主编译器
-做不了这件事，等写 boot/ 的时候再补。
+### 内核
+
+内核单独一套流程，用 `kernel/Makefile`：
+
+```sh
+cd kernel
+make OUT=build ZIG=/path/to/zig          # 编译并链接出 build/kernel.elf
+```
+
+编译器是 clang（`--target=x86_64-unknown-none`），链接器借 **Zig 自带的 lld**。
+这不是选型偏好，是环境所迫：MSYS2 的 lld 只编了 COFF 后端，连 ELF 对象都认不出；
+mingw 的 GNU ld 又写死了 PE 逻辑，出不了 ELF。
+
+ISO 用 limine 官方二进制加 xorriso 打：
+
+```sh
+xorriso -as mkisofs -b boot/limine-bios-cd.bin -no-emul-boot \
+    -boot-load-size 4 -boot-info-table \
+    --efi-boot boot/limine-uefi-cd.bin -efi-boot-part --efi-boot-image \
+    --protective-msdos-label iso -o dospp.iso
+limine bios-install dospp.iso
+qemu-system-x86_64 -m 256M -cdrom dospp.iso -serial stdio -display none
+```
+
+`OUT` 可以指到仓库外。Windows 的「受控文件夹访问」会拦住未经允许的程序写「文档」目录，
+Zig 恰好是这种新程序——踩过一次，症状是 `cannot open output file ... Permission denied`,
+而同一目录下 clang 写得好好的。
 
 ### 网络与证书
 
