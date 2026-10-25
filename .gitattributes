@@ -1,0 +1,11 @@
+# 全按 LF 存。Windows 上不设这个，改一行能显示成整个文件都变了
+* text=auto eol=lf
+
+# 汇编也统一。nasm 不在乎 CRLF，但没必要让仓库里同时存在两种行尾
+*.s    text eol=lf
+*.S    text eol=lf
+*.asm  text eol=lf
+
+# 镜像和 ISO 是二进制，别让 git 拿它们当文本去合并
+*.iso  binary
+*.img  binary

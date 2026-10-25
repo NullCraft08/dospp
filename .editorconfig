@@ -1,0 +1,11 @@
+root = true
+
+# 源码里有中文注释，编码必须钉死成 UTF-8。
+# 不写这个的话，某些编辑器在中文 Windows 上会按 GBK 保存，gcc 直接报错。
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4

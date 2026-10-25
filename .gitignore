@@ -1,0 +1,14 @@
+# 构建产物，没理由进仓库
+build/
+build-*/
+*.o
+*.obj
+*.exe
+
+# meson 生成的编译数据库，每个人机器上都不一样
+compile_commands.json
+
+# tests/progs 里的 .com / .exe 是手写的测试夹具，不是构建产物，必须入库。
+# 上面那条 *.exe 会误伤它们，所以这里开个例外。
+!tests/progs/*.com
+!tests/progs/*.exe
